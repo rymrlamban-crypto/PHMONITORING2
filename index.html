@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>pH Monitor Dashboard</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f4f4f4; padding: 50px; }
+        .gauge-container { background: white; border-radius: 20px; padding: 30px; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        #ph-value { font-size: 80px; font-weight: bold; margin: 20px 0; color: #333; }
+        #status { font-size: 24px; padding: 10px 20px; border-radius: 10px; color: white; }
+        .safe { background: #4CAF50; }
+        .warning { background: #f44336; }
+    </style>
+</head>
+<body>
+
+    <div class="gauge-container">
+        <h1>Current pH Level</h1>
+        <div id="ph-value">0.0</div>
+        <div id="status">Connecting...</div>
+    </div>
+
+    <script>
+        // REPLACE WITH YOUR NEW FIREBASE PROJECT DETAILS
+        const firebaseConfig = {
+            apiKey: "AIzaSyBwKfcDl0rNVl9x4Kq9jSQ4BAqAliZglxg",
+            databaseURL: "https://rymr-49941-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "rymr-49941"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Listen for changes in /ph_monitor/current_ph
+        db.ref('ph_monitor/current_ph').on('value', (snapshot) => {
+            const val = snapshot.val();
+            const phDisp = document.getElementById('ph-value');
+            const statusDisp = document.getElementById('status');
+            
+            phDisp.innerText = val.toFixed(1);
+
+            // Change UI based on pH
+            if (val < 6.0 || val > 8.0) {
+                statusDisp.innerText = "WARNING: OUT OF RANGE";
+                statusDisp.className = "warning";
+                phDisp.style.color = "#f44336";
+            } else {
+                statusDisp.innerText = "STATUS: SAFE / NORMAL";
+                statusDisp.className = "safe";
+                phDisp.style.color = "#4CAF50";
+            }
+        });
+    </script>
+</body>
+</html>
