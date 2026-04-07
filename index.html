@@ -98,14 +98,14 @@
     <div class="overlay" id="overlay" onclick="toggleNav()"></div>
 
     <nav class="sidebar" id="sidebar">
-        <div class="sidebar-header">Select Environment</div>
-        <a href="#" id="link-General" class="active-link" onclick="selectArea('current_ph', 'Water Quality', 6.5, 8.5)">General Monitor</a>
-        <a href="#" id="link-Plants" onclick="selectArea('Plants', 'Agriculture', 5.5, 7.0)">Plants/Agri</a>
+        <div class="sidebar-header">Monitoring Mode</div>
+        <a href="#" id="link-Drinkable" class="active-link" onclick="selectArea('Drinkable', 'Drinking Water', 6.5, 8.5)">Drinkable Water</a>
+        <a href="#" id="link-Plants" onclick="selectArea('Plants', 'Plants/Agri', 5.5, 7.0)">Plants/Agri</a>
         <a href="#" id="link-Pool" onclick="selectArea('Pool', 'Swimming Pool', 7.2, 7.8)">Swimming Pool</a>
     </nav>
 
     <div class="app-container">
-        <h1 id="area-title">Water Quality</h1>
+        <h1 id="area-title">Drinking Water</h1>
         <span id="range-text">Range: 6.5 - 8.5</span>
         <div id="ph-value">--</div>
         <div id="status-box">INITIALIZING...</div>
@@ -124,7 +124,7 @@
 
         let minSafe = 6.5;
         let maxSafe = 8.5;
-        let currentPath = 'ph_monitor/current_ph'; // Matches ESP8266 code
+        const currentPath = 'ph_monitor/current_ph';
         let dbRef;
 
         function toggleNav() {
@@ -133,22 +133,25 @@
         }
 
         function selectArea(areaKey, label, min, max) {
-            currentPath = 'ph_monitor/' + areaKey;
             minSafe = min;
             maxSafe = max;
 
+            // Update UI elements
             document.getElementById('area-title').innerText = label;
-            // FIXED: Using backticks for template literals
             document.getElementById('range-text').innerText = `Range: ${min.toFixed(1)} - ${max.toFixed(1)}`;
             
+            // Manage active link styling
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active-link'));
+            document.getElementById('link-' + areaKey).classList.add('active-link');
             
-            // Highlight the correct link
-            const links = { 'current_ph': 'General', 'Plants': 'Plants', 'Pool': 'Pool' };
-            document.getElementById('link-' + links[areaKey]).classList.add('active-link');
-            
+            // SEND MODE TO ESP8266 (Update Firebase Config)
+            db.ref('ph_monitor/config').update({
+                mode: areaKey
+            }).then(() => {
+                console.log("Mode updated to: " + areaKey);
+            });
+
             toggleNav();
-            initFirebaseListener();
         }
 
         function initFirebaseListener() {
@@ -162,7 +165,6 @@
                 const timeDisp = document.getElementById('sync-time');
                 
                 if (val !== null && val !== undefined) {
-                    // Force val to be a number in case it comes as a string
                     const numericVal = parseFloat(val);
                     phDisp.innerText = numericVal.toFixed(1);
                     timeDisp.innerText = "LAST SYNC: " + new Date().toLocaleTimeString();
@@ -171,7 +173,8 @@
                         statusDisp.innerText = "OUT OF RANGE";
                         statusDisp.className = "warning-box";
                         phDisp.className = "warning-text";
-                        if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+                        // Trigger phone vibration if out of range
+                        if ("vibrate" in navigator) navigator.vibrate([300, 100, 300]);
                     } else {
                         statusDisp.innerText = "STATUS: SAFE";
                         statusDisp.className = "safe-box";
@@ -181,19 +184,20 @@
                     phDisp.innerText = "--";
                     statusDisp.innerText = "OFFLINE";
                     statusDisp.className = "";
-                    timeDisp.innerText = "CHECK ESP8266 CONNECTION";
+                    timeDisp.innerText = "CHECK SENSOR CONNECTION";
                 }
             }, (error) => {
                 console.error("Firebase Error:", error);
-                document.getElementById('sync-time').innerText = "DATABASE ERROR";
+                document.getElementById('sync-time').innerText = "CONNECTION ERROR";
             });
         }
 
-        // Run on startup
+        // Initialize listener on startup
         initFirebaseListener();
 
+        // Optional Service Worker for PWA
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js');
+            navigator.serviceWorker.register('sw.js').catch(err => console.log("SW error", err));
         }
     </script>
 </body>
