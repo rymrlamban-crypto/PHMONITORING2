@@ -99,13 +99,13 @@
 
     <nav class="sidebar" id="sidebar">
         <div class="sidebar-header">Select Environment</div>
-        <a href="#" id="link-Drinkable" class="active-link" onclick="selectArea('Drinkable', 'Drinking Water', 6.5, 8.5)">Drinking Water</a>
-        <a href="#" id="link-Plants" onclick="selectArea('Plants', 'Plant/Agri Water', 5.5, 7.0)">Plants/Agri</a>
+        <a href="#" id="link-General" class="active-link" onclick="selectArea('current_ph', 'Water Quality', 6.5, 8.5)">General Monitor</a>
+        <a href="#" id="link-Plants" onclick="selectArea('Plants', 'Agriculture', 5.5, 7.0)">Plants/Agri</a>
         <a href="#" id="link-Pool" onclick="selectArea('Pool', 'Swimming Pool', 7.2, 7.8)">Swimming Pool</a>
     </nav>
 
     <div class="app-container">
-        <h1 id="area-title">Drinking Water</h1>
+        <h1 id="area-title">Water Quality</h1>
         <span id="range-text">Range: 6.5 - 8.5</span>
         <div id="ph-value">--</div>
         <div id="status-box">INITIALIZING...</div>
@@ -122,10 +122,9 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Current Environment Settings
         let minSafe = 6.5;
         let maxSafe = 8.5;
-        let currentPath = 'ph_monitor/Drinkable';
+        let currentPath = 'ph_monitor/current_ph'; // Matches ESP8266 code
         let dbRef;
 
         function toggleNav() {
@@ -139,17 +138,21 @@
             maxSafe = max;
 
             document.getElementById('area-title').innerText = label;
+            // FIXED: Using backticks for template literals
             document.getElementById('range-text').innerText = `Range: ${min.toFixed(1)} - ${max.toFixed(1)}`;
             
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active-link'));
-            document.getElementById('link-' + areaKey).classList.add('active-link');
+            
+            // Highlight the correct link
+            const links = { 'current_ph': 'General', 'Plants': 'Plants', 'Pool': 'Pool' };
+            document.getElementById('link-' + links[areaKey]).classList.add('active-link');
             
             toggleNav();
             initFirebaseListener();
         }
 
         function initFirebaseListener() {
-            if (dbRef) dbRef.off(); // Detach old listener
+            if (dbRef) dbRef.off(); 
             
             dbRef = db.ref(currentPath);
             dbRef.on('value', (snapshot) => {
@@ -158,11 +161,13 @@
                 const statusDisp = document.getElementById('status-box');
                 const timeDisp = document.getElementById('sync-time');
                 
-                if (val !== null) {
-                    phDisp.innerText = val.toFixed(1);
+                if (val !== null && val !== undefined) {
+                    // Force val to be a number in case it comes as a string
+                    const numericVal = parseFloat(val);
+                    phDisp.innerText = numericVal.toFixed(1);
                     timeDisp.innerText = "LAST SYNC: " + new Date().toLocaleTimeString();
 
-                    if (val < minSafe || val > maxSafe) {
+                    if (numericVal < minSafe || numericVal > maxSafe) {
                         statusDisp.innerText = "OUT OF RANGE";
                         statusDisp.className = "warning-box";
                         phDisp.className = "warning-text";
@@ -174,9 +179,13 @@
                     }
                 } else {
                     phDisp.innerText = "--";
-                    statusDisp.innerText = "NO DATA";
+                    statusDisp.innerText = "OFFLINE";
                     statusDisp.className = "";
+                    timeDisp.innerText = "CHECK ESP8266 CONNECTION";
                 }
+            }, (error) => {
+                console.error("Firebase Error:", error);
+                document.getElementById('sync-time').innerText = "DATABASE ERROR";
             });
         }
 
