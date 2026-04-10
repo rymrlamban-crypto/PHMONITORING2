@@ -81,13 +81,22 @@
             transition: 0.3s;
         }
 
+        #mute-btn {
+            display: block; width: fit-content; margin: 25px auto 0;
+            padding: 12px 25px; border-radius: 30px;
+            background: #1e1e1e; color: #aaa; font-weight: 600;
+            border: 1px solid #333; cursor: pointer; transition: 0.3s;
+            text-transform: uppercase; font-size: 0.75rem; letter-spacing: 1px;
+        }
+        #mute-btn.active-mute { background: rgba(244, 67, 54, 0.15); color: #f44336; border-color: #f44336; }
+
         #sync-time { margin-top: 35px; font-size: 11px; color: #444; font-family: monospace; }
 
         /* Status Styling */
         .safe-text { color: #4CAF50; }
         .warning-text { color: #f44336; }
         .safe-box { background: rgba(76, 175, 80, 0.1); color: #4CAF50; border: 1px solid #4CAF50; }
-        .warning-box { background: rgba(244, 67, 54, 0.1); color: #f44336; border: 1px solid #f44336; }
+        .warning-box { background: rgba(244, 67, 54, 0.1); color: #f44336; border: 1px solid #222; }
     </style>
 </head>
 <body>
@@ -109,6 +118,9 @@
         <span id="range-text">Range: 6.5 - 8.5</span>
         <div id="ph-value">--</div>
         <div id="status-box">INITIALIZING...</div>
+        
+        <button id="mute-btn" onclick="toggleMute()">🔇 Mute Alarm</button>
+        
         <div id="sync-time">WAITING FOR DATA...</div>
     </div>
 
@@ -124,6 +136,7 @@
 
         let minSafe = 6.5;
         let maxSafe = 8.5;
+        let isMuted = false;
         const currentPath = 'ph_monitor/current_ph';
         let dbRef;
 
@@ -136,22 +149,32 @@
             minSafe = min;
             maxSafe = max;
 
-            // Update UI elements
             document.getElementById('area-title').innerText = label;
             document.getElementById('range-text').innerText = `Range: ${min.toFixed(1)} - ${max.toFixed(1)}`;
             
-            // Manage active link styling
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active-link'));
             document.getElementById('link-' + areaKey).classList.add('active-link');
             
-            // SEND MODE TO ESP8266 (Update Firebase Config)
             db.ref('ph_monitor/config').update({
                 mode: areaKey
-            }).then(() => {
-                console.log("Mode updated to: " + areaKey);
             });
 
             toggleNav();
+        }
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            const btn = document.getElementById('mute-btn');
+            
+            // Sync with ESP8266 via Firebase
+            db.ref('ph_monitor/config').update({
+                mute: isMuted
+            });
+
+            // Local UI Update
+            btn.innerText = isMuted ? "🔊 Unmute Alarm" : "🔇 Mute Alarm";
+            if(isMuted) btn.classList.add('active-mute');
+            else btn.classList.remove('active-mute');
         }
 
         function initFirebaseListener() {
@@ -173,8 +196,7 @@
                         statusDisp.innerText = "OUT OF RANGE";
                         statusDisp.className = "warning-box";
                         phDisp.className = "warning-text";
-                        // Trigger phone vibration if out of range
-                        if ("vibrate" in navigator) navigator.vibrate([300, 100, 300]);
+                        if ("vibrate" in navigator && !isMuted) navigator.vibrate([300, 100, 300]);
                     } else {
                         statusDisp.innerText = "STATUS: SAFE";
                         statusDisp.className = "safe-box";
@@ -186,16 +208,20 @@
                     statusDisp.className = "";
                     timeDisp.innerText = "CHECK SENSOR CONNECTION";
                 }
-            }, (error) => {
-                console.error("Firebase Error:", error);
-                document.getElementById('sync-time').innerText = "CONNECTION ERROR";
+            });
+
+            // Listen for remote mute changes (if updated from another device)
+            db.ref('ph_monitor/config/mute').on('value', (snapshot) => {
+                isMuted = snapshot.val() || false;
+                const btn = document.getElementById('mute-btn');
+                btn.innerText = isMuted ? "🔊 Unmute Alarm" : "🔇 Mute Alarm";
+                if(isMuted) btn.classList.add('active-mute');
+                else btn.classList.remove('active-mute');
             });
         }
 
-        // Initialize listener on startup
         initFirebaseListener();
 
-        // Optional Service Worker for PWA
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').catch(err => console.log("SW error", err));
         }
