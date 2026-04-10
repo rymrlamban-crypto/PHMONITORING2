@@ -117,9 +117,18 @@
         .warning-text { color: #f44336; }
         .safe-box { background: rgba(76, 175, 80, 0.1); color: #4CAF50; border: 1px solid #4CAF50; }
         .warning-box { background: rgba(244, 67, 54, 0.1); color: #f44336; border: 1px solid #222; }
+
+        /* Notification Banner */
+        #notif-banner {
+            position: fixed; top: 0; width: 100%; background: #4CAF50; color: white; 
+            padding: 10px; text-align: center; font-size: 13px; z-index: 2000; cursor: pointer;
+            font-weight: bold; display: none;
+        }
     </style>
 </head>
 <body>
+
+    <div id="notif-banner" onclick="requestNotif()">🔔 Tap to Enable Notifications for Alerts</div>
 
     <div class="menu-btn" onclick="toggleNav()">
         <div></div><div></div><div></div>
@@ -176,8 +185,20 @@
         let maxSafe = 8.5;
         let isMuted = false;
         let lastLogTime = 0;
+        let lastNotifTime = 0; // Tracking for notifications
         const currentPath = 'ph_monitor/current_ph';
         let dbRef;
+
+        // Notification Permission Logic
+        function requestNotif() {
+            Notification.requestPermission().then(p => {
+                if(p === "granted") document.getElementById('notif-banner').style.display = 'none';
+            });
+        }
+
+        if (Notification.permission !== "granted") {
+            document.getElementById('notif-banner').style.display = 'block';
+        }
 
         function toggleNav() {
             document.getElementById('sidebar').classList.toggle('active');
@@ -235,6 +256,16 @@
                         statusDisp.innerText = "OUT OF RANGE";
                         statusDisp.className = "warning-box";
                         phDisp.className = "warning-text";
+                        
+                        // NOTIFICATION TRIGGER (Fires even when app is open)
+                        if (Notification.permission === "granted" && Date.now() - lastNotifTime > 300000) { 
+                            new Notification("⚠️ pH Alert: " + numericVal.toFixed(1), {
+                                body: "Current pH is outside the safe range!",
+                                icon: "https://cdn-icons-png.flaticon.com/512/822/822143.png"
+                            });
+                            lastNotifTime = Date.now();
+                        }
+
                         if ("vibrate" in navigator && !isMuted) navigator.vibrate([300, 100, 300]);
                     } else {
                         statusDisp.innerText = "STATUS: SAFE";
