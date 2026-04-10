@@ -22,9 +22,11 @@
             color: white;
             min-height: 100vh;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
+            padding-bottom: 40px;
         }
 
         /* --- Hamburger Menu --- */
@@ -63,6 +65,7 @@
             box-shadow: 20px 20px 60px #0a0a0a, -5px -5px 20px #262626;
             border: 1px solid #333;
             z-index: 1;
+            margin-top: 80px;
         }
 
         #area-title { font-size: 0.9rem; color: #4CAF50; text-transform: uppercase; letter-spacing: 3px; }
@@ -91,6 +94,23 @@
         #mute-btn.active-mute { background: rgba(244, 67, 54, 0.15); color: #f44336; border-color: #f44336; }
 
         #sync-time { margin-top: 35px; font-size: 11px; color: #444; font-family: monospace; }
+
+        /* --- LOGS SECTION --- */
+        .log-section {
+            width: 90%; max-width: 400px;
+            margin-top: 30px;
+            background: #181818;
+            border-radius: 25px;
+            padding: 20px;
+            border: 1px solid #222;
+        }
+        .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .log-header h3 { font-size: 0.8rem; color: #555; text-transform: uppercase; letter-spacing: 1px; }
+        .clear-btn { background: none; border: 1px solid #333; color: #555; padding: 5px 10px; border-radius: 8px; font-size: 10px; cursor: pointer; }
+        
+        .log-table { width: 100%; border-collapse: collapse; color: #aaa; font-size: 0.85rem; }
+        .log-table th { text-align: left; color: #444; font-size: 0.7rem; padding-bottom: 10px; border-bottom: 1px solid #222; }
+        .log-table td { padding: 10px 0; border-bottom: 1px solid #222; }
 
         /* Status Styling */
         .safe-text { color: #4CAF50; }
@@ -124,6 +144,24 @@
         <div id="sync-time">WAITING FOR DATA...</div>
     </div>
 
+    <div class="log-section">
+        <div class="log-header">
+            <h3>Recent History</h3>
+            <button class="clear-btn" onclick="clearLogs()">Clear Logs</button>
+        </div>
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>pH</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="log-body">
+                </tbody>
+        </table>
+    </div>
+
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBwKfcDl0rNVl9x4Kq9jSQ4BAqAliZglxg",
@@ -137,6 +175,7 @@
         let minSafe = 6.5;
         let maxSafe = 8.5;
         let isMuted = false;
+        let lastLogTime = 0;
         const currentPath = 'ph_monitor/current_ph';
         let dbRef;
 
@@ -166,12 +205,10 @@
             isMuted = !isMuted;
             const btn = document.getElementById('mute-btn');
             
-            // Sync with ESP8266 via Firebase
             db.ref('ph_monitor/config').update({
                 mute: isMuted
             });
 
-            // Local UI Update
             btn.innerText = isMuted ? "🔊 Unmute Alarm" : "🔇 Mute Alarm";
             if(isMuted) btn.classList.add('active-mute');
             else btn.classList.remove('active-mute');
@@ -192,7 +229,9 @@
                     phDisp.innerText = numericVal.toFixed(1);
                     timeDisp.innerText = "LAST SYNC: " + new Date().toLocaleTimeString();
 
-                    if (numericVal < minSafe || numericVal > maxSafe) {
+                    const isWarning = (numericVal < minSafe || numericVal > maxSafe);
+
+                    if (isWarning) {
                         statusDisp.innerText = "OUT OF RANGE";
                         statusDisp.className = "warning-box";
                         phDisp.className = "warning-text";
@@ -202,6 +241,17 @@
                         statusDisp.className = "safe-box";
                         phDisp.className = "safe-text";
                     }
+
+                    // --- LOGGING LOGIC (Every 10 Minutes) ---
+                    if (Date.now() - lastLogTime > 600000) { 
+                        db.ref('ph_monitor/ph_logs').push({
+                            val: numericVal,
+                            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                            status: isWarning ? "Warning" : "Safe"
+                        });
+                        lastLogTime = Date.now();
+                    }
+
                 } else {
                     phDisp.innerText = "--";
                     statusDisp.innerText = "OFFLINE";
@@ -210,7 +260,7 @@
                 }
             });
 
-            // Listen for remote mute changes (if updated from another device)
+            // Listen for remote mute changes
             db.ref('ph_monitor/config/mute').on('value', (snapshot) => {
                 isMuted = snapshot.val() || false;
                 const btn = document.getElementById('mute-btn');
@@ -218,6 +268,27 @@
                 if(isMuted) btn.classList.add('active-mute');
                 else btn.classList.remove('active-mute');
             });
+
+            // --- LOAD LOGS INTO TABLE (Last 10) ---
+            db.ref('ph_monitor/ph_logs').limitToLast(10).on('value', (snapshot) => {
+                const logBody = document.getElementById('log-body');
+                logBody.innerHTML = "";
+                snapshot.forEach((child) => {
+                    const data = child.val();
+                    const row = `<tr>
+                        <td>${data.time}</td>
+                        <td style="font-weight:bold">${data.val.toFixed(1)}</td>
+                        <td class="${data.status === 'Warning' ? 'warning-text' : 'safe-text'}">${data.status}</td>
+                    </tr>`;
+                    logBody.insertAdjacentHTML('afterbegin', row); 
+                });
+            });
+        }
+
+        function clearLogs() {
+            if(confirm("Clear all log history?")) {
+                db.ref('ph_monitor/ph_logs').remove();
+            }
         }
 
         initFirebaseListener();
