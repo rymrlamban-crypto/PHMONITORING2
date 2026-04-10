@@ -121,14 +121,14 @@
         /* Notification Banner */
         #notif-banner {
             position: fixed; top: 0; width: 100%; background: #4CAF50; color: white; 
-            padding: 10px; text-align: center; font-size: 13px; z-index: 2000; cursor: pointer;
-            font-weight: bold; display: none;
+            padding: 12px; text-align: center; font-size: 14px; z-index: 2000; cursor: pointer;
+            font-weight: bold; border-bottom: 2px solid rgba(0,0,0,0.1);
         }
     </style>
 </head>
 <body>
 
-    <div id="notif-banner" onclick="requestNotif()">🔔 Tap to Enable Notifications for Alerts</div>
+    <div id="notif-banner" onclick="requestNotif()">🔔 ENABLE PUSH NOTIFICATIONS FOR ALERTS</div>
 
     <div class="menu-btn" onclick="toggleNav()">
         <div></div><div></div><div></div>
@@ -167,7 +167,7 @@
                 </tr>
             </thead>
             <tbody id="log-body">
-                </tbody>
+            </tbody>
         </table>
     </div>
 
@@ -185,19 +185,23 @@
         let maxSafe = 8.5;
         let isMuted = false;
         let lastLogTime = 0;
-        let lastNotifTime = 0; // Tracking for notifications
+        let lastNotifTime = 0; // Prevent notification spam
         const currentPath = 'ph_monitor/current_ph';
         let dbRef;
 
         // Notification Permission Logic
         function requestNotif() {
-            Notification.requestPermission().then(p => {
-                if(p === "granted") document.getElementById('notif-banner').style.display = 'none';
+            Notification.requestPermission().then(permission => {
+                if (permission === "granted") {
+                    document.getElementById('notif-banner').style.display = 'none';
+                    new Notification("Notifications Enabled!", { body: "You will now receive alerts for pH changes." });
+                }
             });
         }
 
-        if (Notification.permission !== "granted") {
-            document.getElementById('notif-banner').style.display = 'block';
+        // Hide banner if already granted
+        if (Notification.permission === "granted") {
+            document.getElementById('notif-banner').style.display = 'none';
         }
 
         function toggleNav() {
@@ -257,10 +261,10 @@
                         statusDisp.className = "warning-box";
                         phDisp.className = "warning-text";
                         
-                        // NOTIFICATION TRIGGER (Fires even when app is open)
+                        // --- SYSTEM NOTIFICATION LOGIC ---
                         if (Notification.permission === "granted" && Date.now() - lastNotifTime > 300000) { 
                             new Notification("⚠️ pH Alert: " + numericVal.toFixed(1), {
-                                body: "Current pH is outside the safe range!",
+                                body: "Value is outside of safe limits!",
                                 icon: "https://cdn-icons-png.flaticon.com/512/822/822143.png"
                             });
                             lastNotifTime = Date.now();
@@ -300,7 +304,7 @@
                 else btn.classList.remove('active-mute');
             });
 
-            // --- LOAD LOGS INTO TABLE (Last 10) ---
+            // --- LOAD LOGS INTO TABLE ---
             db.ref('ph_monitor/ph_logs').limitToLast(10).on('value', (snapshot) => {
                 const logBody = document.getElementById('log-body');
                 logBody.innerHTML = "";
