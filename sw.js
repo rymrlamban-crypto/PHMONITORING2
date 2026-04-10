@@ -1,30 +1,23 @@
 // This allows the PWA to be installed
 self.addEventListener('fetch', (event) => {
-  // Basic fetch listener
+    // Keeps the app installable
 });
 
-// This listener allows the app to show notifications even in the background
-self.addEventListener('push', function(event) {
-    const data = event.data ? event.data.json() : {};
-    const title = data.title || "pH Monitor Alert";
-    const options = {
-        body: data.body || "Your pH levels are out of range!",
-        icon: 'https://cdn-icons-png.flaticon.com/512/822/822143.png',
-        badge: 'https://cdn-icons-png.flaticon.com/512/822/822143.png',
-        vibrate: [300, 100, 300],
-        data: {
-            dateOfArrival: Date.now(),
-            primaryKey: '1'
-        }
-    };
-    event.waitUntil(self.registration.showNotification(title, options));
+// The "Listener" that waits for the main app to send a notification command
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+        const options = {
+            body: event.data.body,
+            icon: 'https://cdn-icons-png.flaticon.com/512/822/822143.png',
+            badge: 'https://cdn-icons-png.flaticon.com/512/822/822143.png',
+            vibrate: [300, 100, 300],
+            tag: 'ph-alert', // Prevents notification stacking
+            renotify: true
+        };
+        
+        self.registration.showNotification(event.data.title, options);
+    }
 });
 
-// Forces the service worker to update immediately
-self.addEventListener('install', (event) => {
-    self.skipWaiting();
-});
-
-self.addEventListener('activate', (event) => {
-    event.waitUntil(clients.claim());
-});
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', () => self.clients.claim());
