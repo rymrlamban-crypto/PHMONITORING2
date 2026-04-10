@@ -126,7 +126,9 @@
 </head>
 <body>
 
-    <div id="notif-banner" onclick="requestNotif()">🔔 ENABLE PUSH NOTIFICATIONS FOR ALERTS</div>
+    <audio id="alert-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
+
+    <div id="notif-banner" onclick="requestNotif()">🔔 ENABLE PUSH NOTIFICATIONS & SOUND</div>
 
     <div class="menu-btn" onclick="toggleNav()">
         <div></div><div></div><div></div>
@@ -188,10 +190,16 @@
         let dbRef;
 
         function requestNotif() {
+            // Unlocking audio context on first user interaction
+            const sound = document.getElementById('alert-sound');
+            sound.play().then(() => {
+                sound.pause(); // Just play/pause to satisfy browser policy
+                sound.currentTime = 0;
+            }).catch(e => console.log("Audio prep failed", e));
+
             Notification.requestPermission().then(permission => {
                 if (permission === "granted") {
                     document.getElementById('notif-banner').style.display = 'none';
-                    // Test notification via Service Worker
                     if (navigator.serviceWorker.controller) {
                         navigator.serviceWorker.controller.postMessage({
                             type: 'SHOW_NOTIFICATION',
@@ -253,7 +261,14 @@
                         statusDisp.className = "warning-box";
                         phDisp.className = "warning-text";
                         
-                        // --- UPDATED SERVICE WORKER NOTIFICATION LOGIC ---
+                        // --- PLAY SOUND IF NOT MUTED ---
+                        if (!isMuted) {
+                            const sound = document.getElementById('alert-sound');
+                            sound.currentTime = 0; 
+                            sound.play().catch(e => console.log("Sound blocked by browser. Interaction required."));
+                        }
+
+                        // --- SERVICE WORKER NOTIFICATION ---
                         if (Notification.permission === "granted" && Date.now() - lastNotifTime > 300000) { 
                             if (navigator.serviceWorker.controller) {
                                 navigator.serviceWorker.controller.postMessage({
@@ -262,7 +277,6 @@
                                     body: "Value is outside of safe limits!"
                                 });
                             } else {
-                                // Browser fallback
                                 new Notification("⚠️ pH Alert: " + numericVal.toFixed(1), {
                                     body: "Value is outside of safe limits!"
                                 });
