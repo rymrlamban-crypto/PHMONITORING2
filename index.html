@@ -271,17 +271,17 @@
                         // --- ALERT COOLDOWN LOGIC (5 MINUTES) ---
                         if (Date.now() - lastNotifTime > 300000) { 
                             
-                            // 1. Play Sound for 3 seconds if not muted
+                            // 1. Play Sound for 5 seconds if not muted
                             if (!isMuted) {
                                 const sound = document.getElementById('alert-sound');
                                 sound.currentTime = 0; 
                                 sound.play().catch(e => console.log("Sound blocked. Click page to enable."));
                                 
-                                // Stop sound after 3 seconds
+                                // Stop sound after exactly 5 seconds
                                 setTimeout(() => {
                                     sound.pause();
                                     sound.currentTime = 0;
-                                }, 3000);
+                                }, 5000);
                             }
 
                             // 2. Trigger Push Notification
