@@ -112,13 +112,11 @@
         .log-table th { text-align: left; color: #444; font-size: 0.7rem; padding-bottom: 10px; border-bottom: 1px solid #222; }
         .log-table td { padding: 10px 0; border-bottom: 1px solid #222; }
 
-        /* Status Styling */
         .safe-text { color: #4CAF50; }
         .warning-text { color: #f44336; }
         .safe-box { background: rgba(76, 175, 80, 0.1); color: #4CAF50; border: 1px solid #4CAF50; }
         .warning-box { background: rgba(244, 67, 54, 0.1); color: #f44336; border: 1px solid #222; }
 
-        /* Notification Banner */
         #notif-banner {
             position: fixed; top: 0; width: 100%; background: #4CAF50; color: white; 
             padding: 12px; text-align: center; font-size: 14px; z-index: 2000; cursor: pointer;
@@ -185,21 +183,26 @@
         let maxSafe = 8.5;
         let isMuted = false;
         let lastLogTime = 0;
-        let lastNotifTime = 0; // Prevent notification spam
+        let lastNotifTime = 0; 
         const currentPath = 'ph_monitor/current_ph';
         let dbRef;
 
-        // Notification Permission Logic
         function requestNotif() {
             Notification.requestPermission().then(permission => {
                 if (permission === "granted") {
                     document.getElementById('notif-banner').style.display = 'none';
-                    new Notification("Notifications Enabled!", { body: "You will now receive alerts for pH changes." });
+                    // Test notification via Service Worker
+                    if (navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({
+                            type: 'SHOW_NOTIFICATION',
+                            title: "Notifications Enabled!",
+                            body: "You will now receive alerts for pH changes."
+                        });
+                    }
                 }
             });
         }
 
-        // Hide banner if already granted
         if (Notification.permission === "granted") {
             document.getElementById('notif-banner').style.display = 'none';
         }
@@ -212,28 +215,18 @@
         function selectArea(areaKey, label, min, max) {
             minSafe = min;
             maxSafe = max;
-
             document.getElementById('area-title').innerText = label;
             document.getElementById('range-text').innerText = `Range: ${min.toFixed(1)} - ${max.toFixed(1)}`;
-            
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active-link'));
             document.getElementById('link-' + areaKey).classList.add('active-link');
-            
-            db.ref('ph_monitor/config').update({
-                mode: areaKey
-            });
-
+            db.ref('ph_monitor/config').update({ mode: areaKey });
             toggleNav();
         }
 
         function toggleMute() {
             isMuted = !isMuted;
             const btn = document.getElementById('mute-btn');
-            
-            db.ref('ph_monitor/config').update({
-                mute: isMuted
-            });
-
+            db.ref('ph_monitor/config').update({ mute: isMuted });
             btn.innerText = isMuted ? "🔊 Unmute Alarm" : "🔇 Mute Alarm";
             if(isMuted) btn.classList.add('active-mute');
             else btn.classList.remove('active-mute');
@@ -241,7 +234,6 @@
 
         function initFirebaseListener() {
             if (dbRef) dbRef.off(); 
-            
             dbRef = db.ref(currentPath);
             dbRef.on('value', (snapshot) => {
                 const val = snapshot.val();
@@ -261,12 +253,20 @@
                         statusDisp.className = "warning-box";
                         phDisp.className = "warning-text";
                         
-                        // --- SYSTEM NOTIFICATION LOGIC ---
+                        // --- UPDATED SERVICE WORKER NOTIFICATION LOGIC ---
                         if (Notification.permission === "granted" && Date.now() - lastNotifTime > 300000) { 
-                            new Notification("⚠️ pH Alert: " + numericVal.toFixed(1), {
-                                body: "Value is outside of safe limits!",
-                                icon: "https://cdn-icons-png.flaticon.com/512/822/822143.png"
-                            });
+                            if (navigator.serviceWorker.controller) {
+                                navigator.serviceWorker.controller.postMessage({
+                                    type: 'SHOW_NOTIFICATION',
+                                    title: "⚠️ pH Alert: " + numericVal.toFixed(1),
+                                    body: "Value is outside of safe limits!"
+                                });
+                            } else {
+                                // Browser fallback
+                                new Notification("⚠️ pH Alert: " + numericVal.toFixed(1), {
+                                    body: "Value is outside of safe limits!"
+                                });
+                            }
                             lastNotifTime = Date.now();
                         }
 
@@ -277,7 +277,6 @@
                         phDisp.className = "safe-text";
                     }
 
-                    // --- LOGGING LOGIC (Every 10 Minutes) ---
                     if (Date.now() - lastLogTime > 600000) { 
                         db.ref('ph_monitor/ph_logs').push({
                             val: numericVal,
@@ -286,7 +285,6 @@
                         });
                         lastLogTime = Date.now();
                     }
-
                 } else {
                     phDisp.innerText = "--";
                     statusDisp.innerText = "OFFLINE";
@@ -295,7 +293,6 @@
                 }
             });
 
-            // Listen for remote mute changes
             db.ref('ph_monitor/config/mute').on('value', (snapshot) => {
                 isMuted = snapshot.val() || false;
                 const btn = document.getElementById('mute-btn');
@@ -304,7 +301,6 @@
                 else btn.classList.remove('active-mute');
             });
 
-            // --- LOAD LOGS INTO TABLE ---
             db.ref('ph_monitor/ph_logs').limitToLast(10).on('value', (snapshot) => {
                 const logBody = document.getElementById('log-body');
                 logBody.innerHTML = "";
@@ -329,7 +325,9 @@
         initFirebaseListener();
 
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').catch(err => console.log("SW error", err));
+            navigator.serviceWorker.register('sw.js').then(reg => {
+                console.log("Service Worker Registered");
+            }).catch(err => console.log("SW error", err));
         }
     </script>
 </body>
