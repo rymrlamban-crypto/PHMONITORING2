@@ -112,6 +112,25 @@
         .log-table th { text-align: left; color: #444; font-size: 0.7rem; padding-bottom: 10px; border-bottom: 1px solid #222; }
         .log-table td { padding: 10px 0; border-bottom: 1px solid #222; }
 
+        /* --- Custom Range Panel --- */
+        #custom-panel {
+            margin-top: 20px;
+            background: rgba(255,255,255,0.03);
+            padding: 15px;
+            border-radius: 20px;
+            display: none;
+            border: 1px dashed #444;
+        }
+        .custom-inputs { display: flex; justify-content: center; align-items: center; gap: 10px; }
+        .custom-inputs input {
+            width: 60px; background: #222; border: 1px solid #444; color: white;
+            padding: 8px; border-radius: 8px; text-align: center; font-weight: bold;
+        }
+        .set-btn {
+            background: #4CAF50; color: white; border: none; padding: 8px 15px;
+            border-radius: 8px; font-size: 0.7rem; font-weight: bold; cursor: pointer;
+        }
+
         .safe-text { color: #4CAF50; }
         .warning-text { color: #f44336; }
         .safe-box { background: rgba(76, 175, 80, 0.1); color: #4CAF50; border: 1px solid #4CAF50; }
@@ -140,11 +159,22 @@
         <a href="#" id="link-Drinkable" class="active-link" onclick="selectArea('Drinkable', 'Drinking Water', 6.5, 8.5)">Drinkable Water</a>
         <a href="#" id="link-Plants" onclick="selectArea('Plants', 'Plants/Agri', 5.5, 7.0)">Plants/Agri</a>
         <a href="#" id="link-Pool" onclick="selectArea('Pool', 'Swimming Pool', 7.2, 7.8)">Swimming Pool</a>
+        <a href="#" id="link-Custom" onclick="enableCustomMode()">Custom Range</a>
     </nav>
 
     <div class="app-container">
         <h1 id="area-title">Drinking Water</h1>
         <span id="range-text">Range: 6.5 - 8.5</span>
+        
+        <div id="custom-panel">
+            <div class="custom-inputs">
+                <input type="number" id="min-input" step="0.1" placeholder="Min">
+                <span style="color:#555">to</span>
+                <input type="number" id="max-input" step="0.1" placeholder="Max">
+                <button class="set-btn" onclick="applyCustomRange()">SET</button>
+            </div>
+        </div>
+
         <div id="ph-value">--</div>
         <div id="status-box">INITIALIZING...</div>
         
@@ -190,7 +220,6 @@
         let dbRef;
 
         function requestNotif() {
-            // Unlocking audio context on first user interaction
             const sound = document.getElementById('alert-sound');
             sound.play().then(() => {
                 sound.pause(); 
@@ -200,13 +229,6 @@
             Notification.requestPermission().then(permission => {
                 if (permission === "granted") {
                     document.getElementById('notif-banner').style.display = 'none';
-                    if (navigator.serviceWorker.controller) {
-                        navigator.serviceWorker.controller.postMessage({
-                            type: 'SHOW_NOTIFICATION',
-                            title: "Notifications Enabled!",
-                            body: "You will now receive alerts for pH changes."
-                        });
-                    }
                 }
             });
         }
@@ -223,6 +245,7 @@
         function selectArea(areaKey, label, min, max) {
             minSafe = min;
             maxSafe = max;
+            document.getElementById('custom-panel').style.display = 'none';
             document.getElementById('area-title').innerText = label;
             document.getElementById('range-text').innerText = `Range: ${min.toFixed(1)} - ${max.toFixed(1)}`;
             document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active-link'));
@@ -231,19 +254,50 @@
             toggleNav();
         }
 
+        function enableCustomMode() {
+            document.getElementById('area-title').innerText = "Custom Mode";
+            document.getElementById('range-text').innerText = "Enter desired range below";
+            document.getElementById('custom-panel').style.display = 'block';
+            document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active-link'));
+            document.getElementById('link-Custom').classList.add('active-link');
+            toggleNav();
+        }
+
+        function applyCustomRange() {
+            const min = parseFloat(document.getElementById('min-input').value);
+            const max = parseFloat(document.getElementById('max-input').value);
+
+            if (isNaN(min) || isNaN(max)) {
+                alert("Please enter valid numbers");
+                return;
+            }
+            if (min >= max) {
+                alert("Min must be less than Max");
+                return;
+            }
+
+            minSafe = min;
+            maxSafe = max;
+            document.getElementById('range-text').innerText = `Range: ${min.toFixed(1)} - ${max.toFixed(1)}`;
+            db.ref('ph_monitor/config').update({ 
+                mode: 'Custom',
+                customMin: min,
+                customMax: max 
+            });
+        }
+
         function toggleMute() {
             isMuted = !isMuted;
             const btn = document.getElementById('mute-btn');
             db.ref('ph_monitor/config').update({ mute: isMuted });
             btn.innerText = isMuted ? "🔊 Unmute Alarm" : "🔇 Mute Alarm";
-            if(isMuted) btn.classList.add('active-mute');
-            else btn.classList.remove('active-mute');
-            
-            // Stop sound immediately if muted while playing
             if(isMuted) {
+                btn.classList.add('active-mute');
                 const sound = document.getElementById('alert-sound');
                 sound.pause();
                 sound.currentTime = 0;
+            } else {
+                btn.classList.remove('active-mute');
             }
         }
 
@@ -268,40 +322,25 @@
                         statusDisp.className = "warning-box";
                         phDisp.className = "warning-text";
                         
-                        // --- ALERT COOLDOWN LOGIC (5 MINUTES) ---
                         if (Date.now() - lastNotifTime > 300000) { 
-                            
-                            // 1. Play Sound for 5 seconds if not muted
                             if (!isMuted) {
                                 const sound = document.getElementById('alert-sound');
                                 sound.currentTime = 0; 
-                                sound.play().catch(e => console.log("Sound blocked. Click page to enable."));
+                                sound.play().catch(e => console.log("Sound blocked"));
                                 
-                                // Stop sound after exactly 5 seconds
                                 setTimeout(() => {
                                     sound.pause();
                                     sound.currentTime = 0;
                                 }, 5000);
                             }
 
-                            // 2. Trigger Push Notification
                             if (Notification.permission === "granted") {
-                                if (navigator.serviceWorker.controller) {
-                                    navigator.serviceWorker.controller.postMessage({
-                                        type: 'SHOW_NOTIFICATION',
-                                        title: "⚠️ pH Alert: " + numericVal.toFixed(1),
-                                        body: "Value is outside of safe limits!"
-                                    });
-                                } else {
-                                    new Notification("⚠️ pH Alert: " + numericVal.toFixed(1), {
-                                        body: "Value is outside of safe limits!"
-                                    });
-                                }
+                                new Notification("⚠️ pH Alert: " + numericVal.toFixed(1), {
+                                    body: "Value is outside of your set limits!"
+                                });
                             }
 
-                            // 3. Trigger Vibration
                             if ("vibrate" in navigator && !isMuted) navigator.vibrate([300, 100, 300]);
-
                             lastNotifTime = Date.now();
                         }
                     } else {
@@ -358,9 +397,7 @@
         initFirebaseListener();
 
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').then(reg => {
-                console.log("Service Worker Registered");
-            }).catch(err => console.log("SW error", err));
+            navigator.serviceWorker.register('sw.js').catch(err => console.log("SW error", err));
         }
     </script>
 </body>
