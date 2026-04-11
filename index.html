@@ -279,6 +279,8 @@
             minSafe = min;
             maxSafe = max;
             document.getElementById('range-text').innerText = `Range: ${min.toFixed(1)} - ${max.toFixed(1)}`;
+            
+            // Sync both mode and new values to Firebase for Arduino to read
             db.ref('ph_monitor/config').update({ 
                 mode: 'Custom',
                 customMin: min,
@@ -371,6 +373,16 @@
                 btn.innerText = isMuted ? "🔊 Unmute Alarm" : "🔇 Mute Alarm";
                 if(isMuted) btn.classList.add('active-mute');
                 else btn.classList.remove('active-mute');
+            });
+
+            // Added listener to pull existing Custom Ranges from Firebase on refresh
+            db.ref('ph_monitor/config').on('value', (snapshot) => {
+                const config = snapshot.val();
+                if (config && config.mode === 'Custom') {
+                    if (config.customMin !== undefined) minSafe = config.customMin;
+                    if (config.customMax !== undefined) maxSafe = config.customMax;
+                    document.getElementById('range-text').innerText = `Range: ${minSafe.toFixed(1)} - ${maxSafe.toFixed(1)}`;
+                }
             });
 
             db.ref('ph_monitor/ph_logs').limitToLast(10).on('value', (snapshot) => {
