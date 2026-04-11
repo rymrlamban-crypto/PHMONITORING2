@@ -147,7 +147,7 @@
 
     <audio id="alert-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" loop></audio>
 
-    <div id="notif-banner" onclick="requestNotif()">🔔 ENABLE PUSH NOTIFICATIONS & SOUND</div>
+    <div id="notif-banner" onclick="requestNotif()"> ENABLE PUSH NOTIFICATIONS & SOUND</div>
 
     <div class="menu-btn" onclick="toggleNav()">
         <div></div><div></div><div></div>
@@ -178,7 +178,7 @@
         <div id="ph-value">--</div>
         <div id="status-box">INITIALIZING...</div>
         
-        <button id="mute-btn" onclick="toggleMute()">🔇 Mute Alarm</button>
+        <button id="mute-btn" onclick="toggleMute()"> Mute Alarm</button>
         
         <div id="sync-time">WAITING FOR DATA...</div>
     </div>
@@ -279,8 +279,6 @@
             minSafe = min;
             maxSafe = max;
             document.getElementById('range-text').innerText = `Range: ${min.toFixed(1)} - ${max.toFixed(1)}`;
-            
-            // Sync both mode and new values to Firebase for Arduino to read
             db.ref('ph_monitor/config').update({ 
                 mode: 'Custom',
                 customMin: min,
@@ -292,7 +290,7 @@
             isMuted = !isMuted;
             const btn = document.getElementById('mute-btn');
             db.ref('ph_monitor/config').update({ mute: isMuted });
-            btn.innerText = isMuted ? "🔊 Unmute Alarm" : "🔇 Mute Alarm";
+            btn.innerText = isMuted ? " Unmute Alarm" : " Mute Alarm";
             if(isMuted) {
                 btn.classList.add('active-mute');
                 const sound = document.getElementById('alert-sound');
@@ -337,7 +335,7 @@
                             }
 
                             if (Notification.permission === "granted") {
-                                new Notification("⚠️ pH Alert: " + numericVal.toFixed(1), {
+                                new Notification(" pH Alert: " + numericVal.toFixed(1), {
                                     body: "Value is outside of your set limits!"
                                 });
                             }
@@ -370,17 +368,22 @@
             db.ref('ph_monitor/config/mute').on('value', (snapshot) => {
                 isMuted = snapshot.val() || false;
                 const btn = document.getElementById('mute-btn');
-                btn.innerText = isMuted ? "🔊 Unmute Alarm" : "🔇 Mute Alarm";
+                btn.innerText = isMuted ? " Unmute Alarm" : " Mute Alarm";
                 if(isMuted) btn.classList.add('active-mute');
                 else btn.classList.remove('active-mute');
             });
 
-            // Added listener to pull existing Custom Ranges from Firebase on refresh
+            // --- SYNC UPDATE BLOCK ---
             db.ref('ph_monitor/config').on('value', (snapshot) => {
                 const config = snapshot.val();
-                if (config && config.mode === 'Custom') {
-                    if (config.customMin !== undefined) minSafe = config.customMin;
-                    if (config.customMax !== undefined) maxSafe = config.customMax;
+                if (config) {
+                    if (config.mode === 'Drinkable') { minSafe = 6.5; maxSafe = 8.5; }
+                    else if (config.mode === 'Plants') { minSafe = 5.5; maxSafe = 7.0; }
+                    else if (config.mode === 'Pool') { minSafe = 7.2; maxSafe = 7.8; }
+                    else if (config.mode === 'Custom') {
+                        if (config.customMin !== undefined) minSafe = config.customMin;
+                        if (config.customMax !== undefined) maxSafe = config.customMax;
+                    }
                     document.getElementById('range-text').innerText = `Range: ${minSafe.toFixed(1)} - ${maxSafe.toFixed(1)}`;
                 }
             });
