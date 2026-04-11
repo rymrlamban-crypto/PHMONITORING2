@@ -216,6 +216,7 @@
         let isMuted = false;
         let lastLogTime = 0;
         let lastNotifTime = 0; 
+        let isWaitingForCustom = false; // New flag added
         const currentPath = 'ph_monitor/current_ph';
         let dbRef;
 
@@ -243,6 +244,7 @@
         }
 
         function selectArea(areaKey, label, min, max) {
+            isWaitingForCustom = false; // Immediate monitoring for preset roles
             minSafe = min;
             maxSafe = max;
             document.getElementById('custom-panel').style.display = 'none';
@@ -255,6 +257,10 @@
         }
 
         function enableCustomMode() {
+            isWaitingForCustom = true; // Enter waiting state (Hide value)
+            document.getElementById('ph-value').innerText = "---";
+            document.getElementById('status-box').innerText = "WAITING FOR INPUT";
+            document.getElementById('status-box').className = "";
             document.getElementById('area-title').innerText = "Custom Mode";
             document.getElementById('range-text').innerText = "Enter desired range below";
             document.getElementById('custom-panel').style.display = 'block';
@@ -267,17 +273,14 @@
             const min = parseFloat(document.getElementById('min-input').value);
             const max = parseFloat(document.getElementById('max-input').value);
 
-            if (isNaN(min) || isNaN(max)) {
-                alert("Please enter valid numbers");
-                return;
-            }
-            if (min >= max) {
-                alert("Min must be less than Max");
+            if (isNaN(min) || isNaN(max) || min >= max) {
+                alert("Invalid Range");
                 return;
             }
 
             minSafe = min;
             maxSafe = max;
+            isWaitingForCustom = false; // Exit waiting state (Show value)
             document.getElementById('range-text').innerText = `Range: ${min.toFixed(1)} - ${max.toFixed(1)}`;
             db.ref('ph_monitor/config').update({ 
                 mode: 'Custom',
@@ -306,6 +309,10 @@
             dbRef = db.ref(currentPath);
             dbRef.on('value', (snapshot) => {
                 const val = snapshot.val();
+                
+                // --- UPDATE: Block UI/Sound if in waiting mode ---
+                if (isWaitingForCustom) return;
+
                 const phDisp = document.getElementById('ph-value');
                 const statusDisp = document.getElementById('status-box');
                 const timeDisp = document.getElementById('sync-time');
@@ -373,18 +380,19 @@
                 else btn.classList.remove('active-mute');
             });
 
-            // --- SYNC UPDATE BLOCK ---
             db.ref('ph_monitor/config').on('value', (snapshot) => {
                 const config = snapshot.val();
                 if (config) {
-                    if (config.mode === 'Drinkable') { minSafe = 6.5; maxSafe = 8.5; }
-                    else if (config.mode === 'Plants') { minSafe = 5.5; maxSafe = 7.0; }
-                    else if (config.mode === 'Pool') { minSafe = 7.2; maxSafe = 7.8; }
-                    else if (config.mode === 'Custom') {
+                    if (config.mode === 'Drinkable') { minSafe = 6.5; maxSafe = 8.5; isWaitingForCustom = false; }
+                    else if (config.mode === 'Plants') { minSafe = 5.5; maxSafe = 7.0; isWaitingForCustom = false; }
+                    else if (config.mode === 'Pool') { minSafe = 7.2; maxSafe = 7.8; isWaitingForCustom = false; }
+                    else if (config.mode === 'Custom' && !isWaitingForCustom) {
                         if (config.customMin !== undefined) minSafe = config.customMin;
                         if (config.customMax !== undefined) maxSafe = config.customMax;
                     }
-                    document.getElementById('range-text').innerText = `Range: ${minSafe.toFixed(1)} - ${maxSafe.toFixed(1)}`;
+                    if (!isWaitingForCustom) {
+                        document.getElementById('range-text').innerText = `Range: ${minSafe.toFixed(1)} - ${maxSafe.toFixed(1)}`;
+                    }
                 }
             });
 
